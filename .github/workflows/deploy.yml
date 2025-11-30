@@ -1,0 +1,27 @@
+name: Auto Deploy to DigitalOcean
+
+on:
+  push:
+    branches: [ "main" ]  # or master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Deploy via SSH
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_KEY }}
+        script: |
+          cd /root/test_backend/test-backend
+          git pull origin main
+          npm install
+          npm run build
+          pm2 restart test-backend || pm2 start dist/server.js --name test-backend
+          pm2 save
