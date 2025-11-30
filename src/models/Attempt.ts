@@ -18,5 +18,5 @@ const AttemptSchema = new Schema<IAttempt>({
   timeTaken: Number,
   completedAt: { type: Date, default: Date.now }
 });
-
+// Ensure combination of userId, testId, and attemptNumber is unique
 export default mongoose.model<IAttempt>('Attempt', AttemptSchema);
