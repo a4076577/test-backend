@@ -1,6 +1,6 @@
 import dotenv from "dotenv";
 dotenv.config();
-const key = "AIzaSyCYR_hiij8r-tMeXOgFi8rngbpav-DRFGo";
+const key = process.env.GOOGLE_API_KEY || "";
 console.log("apikey:", key);
 const url = `https://generativelanguage.googleapis.com/v1/models?key=${key}`;
 
