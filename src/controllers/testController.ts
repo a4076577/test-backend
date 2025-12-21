@@ -139,4 +139,17 @@ export const getAdminTests = async (req: AuthRequest, res: Response) => {
     } catch (err: any) {
         res.status(500).json({ message: err.message });
     }
-}
+};
+
+// NEW: Get All Reports for Superuser
+export const getAdminReports = async (req: AuthRequest, res: Response) => {
+    try {
+        if (req.user?.email !== 'abc@abc.in') {
+          return res.status(403).json({ message: "Superuser access required" });
+        }
+        const reports = await testService.getAllAttemptsAdmin();
+        res.json(reports);
+    } catch (err: any) {
+        res.status(500).json({ message: err.message });
+    }
+};

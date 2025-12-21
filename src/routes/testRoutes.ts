@@ -11,7 +11,10 @@ router.use(authMiddleware);
 // GET /api/tests - Dashboard
 router.get('/', testController.getDashboardData);
 
-// GET /api/tests/admin - All Tests for Manage Panel (Specific route before :id)
+// GET /api/tests/admin/reports - Student Reports (Must be before /:id)
+router.get('/admin/reports', testController.getAdminReports);
+
+// GET /api/tests/admin/all - All Tests for Manage Panel
 router.get('/admin/all', testController.getAdminTests);
 
 // GET /api/tests/attempt/:attemptId - Get Specific Attempt

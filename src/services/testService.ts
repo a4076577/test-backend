@@ -12,20 +12,21 @@ export const createTest = async (testData: Partial<ITest>, userId: string) => {
   return await test.save();
 };
 
-// 2. Get Dashboard Data
+// 2. Get Dashboard Data (Tests + User's Attempts joined)
 export const getDashboardData = async (userEmail: string, userId: string) => {
   let query: any = {
     $or: [{ assignedTo: 'public' }, { assignedTo: userEmail }]
   };
-//  console.log('getDashboardData for:', userEmail);
+
+  // SUPERUSER OVERRIDE: abc@abc.in sees ALL tests
   if (userEmail === 'abc@abc.in') {
-    query = {}; 
+    query = {}; // No filter, return everything
   }
 
   const tests = await Test.find(query)
     .select('-questions.answer -questions.analysis')
     .sort({ createdAt: -1 })
-    .populate('createdBy', 'name') // POPULATE NAME HERE
+    .populate('createdBy', 'name')
     .lean();
 
   const attempts = await Attempt.find({ userId }).sort({ completedAt: -1 }).lean();
@@ -34,13 +35,12 @@ export const getDashboardData = async (userEmail: string, userId: string) => {
     const testAttempts = attempts.filter(a => a.testId.toString() === test._id.toString());
     const scores = testAttempts.map(a => a.score || 0);
     const bestScore = scores.length > 0 ? Math.max(...scores) : 0;
-
-    // Handle populated field safely
+    
     const creatorName = (test.createdBy as any)?.name || 'Unknown';
 
     return {
       ...test,
-      creatorName, // Pass to frontend
+      creatorName,
       attempts: testAttempts,
       isAttempted: testAttempts.length > 0,
       lastAttemptDate: testAttempts.length > 0 ? testAttempts[0].completedAt : null,
@@ -51,7 +51,7 @@ export const getDashboardData = async (userEmail: string, userId: string) => {
   return dashboardData;
 };
 
-// 3. Get Test for Taking
+// 3. Get Test for Taking (Hides Answers)
 export const getTestForTaking = async (testId: string, userId: string) => {
   const test = await Test.findById(testId).select('-questions.answer -questions.analysis').lean();
   if (!test) throw new Error('Test not found');
@@ -64,7 +64,7 @@ export const getTestForTaking = async (testId: string, userId: string) => {
   };
 };
 
-// 4. Get Test for Analysis
+// 4. Get Test for Analysis (Shows Answers)
 export const getTestWithAnswers = async (testId: string) => {
   const test = await Test.findById(testId).lean();
   if (!test) throw new Error('Test not found');
@@ -162,5 +162,14 @@ export const getAllTestsAdmin = async () => {
   return await Test.find()
     .populate('createdBy', 'name email')
     .sort({ createdAt: -1 })
+    .lean();
+};
+
+// NEW: Get All Attempts for Reports (Superuser)
+export const getAllAttemptsAdmin = async () => {
+  return await Attempt.find()
+    .populate('userId', 'name email')
+    .populate('testId', 'title')
+    .sort({ completedAt: -1 })
     .lean();
 };
