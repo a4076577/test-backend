@@ -1,19 +1,26 @@
-// server/src/services/aiService.ts
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+// 1. Load all available keys into an array
+const apiKeys = [
+  process.env.GEMINI_API_KEY,
+  process.env.GEMINI_API_KEY2,
+  process.env.GEMINI_API_KEY3
+].filter(key => !!key && key.trim() !== "");
 
-// PRO MODEL
-const model = genAI.getGenerativeModel({
-  model: "gemini-2.5-flash",
-  generationConfig: {
-    responseMimeType: "application/json",
-    maxOutputTokens: 65000
-  }
-});
+// Helper to get a fresh model instance for a specific key
+const getModel = (apiKey: string) => {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  return genAI.getGenerativeModel({
+    model: "gemini-2.5-flash",
+    generationConfig: {
+      responseMimeType: "application/json",
+      maxOutputTokens: 65000
+    }
+  });
+};
 
 function fixJSON(text: string) {
   let fixed = text;
@@ -34,17 +41,19 @@ interface GenerateOptions {
 }
 
 export const generateQuestions = async (options: GenerateOptions) => {
-  const { singleCount, multiCount, matchingCount, difficulty, subjects, remarks } = options;
-  const totalQuestions = singleCount + multiCount + matchingCount;
+  const { singleCount, multiCount, difficulty, subjects, remarks } = options;
+  const totalQuestions = singleCount + multiCount;
+  
   if (totalQuestions <= 0) throw new Error("At least one question must be requested.");
-  if( totalQuestions > 50 ) throw new Error("Cannot generate more than 50 questions at a time.");
+  if (totalQuestions > 12) throw new Error("Cannot generate more than 12 questions at a time.");
+  
   let difficultyLabel = difficulty;
   if (difficulty.toLowerCase() === 'hard') {
-         difficultyLabel = 'Expert / Hard';
+    difficultyLabel = 'Expert / Hard';
   }
+  
   console.log("Generating", totalQuestions, "questions of", difficultyLabel, "level in subjects:", subjects);
-  // return;
-  // UPPSC SPECIFIC PROMPT
+
   const prompt = `
     You are an expert exam setter for the **UPPSC (Uttar Pradesh Public Service Commission)** Pre/Mains. 
     Your task is to generate a JSON array of ${totalQuestions} high-quality questions in **HINDI (Devanagari Script)**.
@@ -72,13 +81,12 @@ export const generateQuestions = async (options: GenerateOptions) => {
     -------------------------
     - ${singleCount} × Single Correct (Make these statement based or assertion-reason where possible).
     - ${multiCount} × Multiple Selection (Select 1, 2, 3 etc).
-    - ${matchingCount} × Match List Type.
 
     -------------------------
     📌 **STRICT JSON SCHEMA**
     -------------------------
-    Output MUST be **ONLY** a JSON array "[]". No markdown.
-
+    Output MUST be **ONLY** a JSON array "[]". No markdown. No extra text. Each question object must follow this schema:
+    
     **TYPE: "single"** (For Statement/Assertion type, put options A,B,C,D as usual)
     {
       "id": "unique_string",
@@ -105,36 +113,56 @@ export const generateQuestions = async (options: GenerateOptions) => {
       "hint": "...",
       "analysis": "..."
     }
-
-    **TYPE: "matching"**
-    {
-      "id": "unique_string",
-      "type": "matching",
-      "question": "Match List I with List II (Hindi)",
-      "list_a": ["A. ...", "B. ...", "C. ...", "D. ..."],
-      "list_b": ["1. ...", "2. ...", "3. ...", "4. ..."],
-      "options": [
-        { "id": "A", "text": "A-1, B-2, C-3, D-4" }, ...
-      ],
-      "answer": ["A"],
-      "hint": "...",
-      "analysis": "..."
-    }
   `;
 
-  try {
-    const result = await model.generateContent(
-      JSON.stringify({ instruction: prompt })
-    );
+  // 2. Retry Logic: Loop through all available keys
+  let lastError: any = null;
 
-    const raw = result.response.text();
-    const clean = fixJSON(raw);
-    const parsed = JSON.parse(clean);
-    
-    // Safety check to ensure it's an array
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.error("AI Generation Error:", error);
-    throw new Error("AI returned invalid JSON. Please try again.");
+  if (apiKeys.length === 0) {
+      throw new Error("No Gemini API keys found in .env file (GEMINI_API_KEY, GEMINI_API_KEY2, etc.)");
   }
+
+  for (let i = 0; i < apiKeys.length; i++) {
+    const currentKey = apiKeys[i];
+    
+    try {
+      console.log(`[AI Service] Attempting generation with API Key #${i + 1} (ends in ...${currentKey?.slice(-4)})`);
+      
+      const model = getModel(currentKey!);
+      const result = await model.generateContent(prompt);
+
+      const raw = result.response.text();
+      const clean = fixJSON(raw);
+      const parsed = JSON.parse(clean);
+      
+      // If success, return immediately and exit function
+      return Array.isArray(parsed) ? parsed : [];
+
+    } catch (error: any) {
+      console.error(`[AI Service] Error with API Key #${i + 1}:`, error.message);
+      lastError = error;
+
+      // 3. Detect Quota Error (429)
+      const isQuotaError = error.status === 429 || 
+                           (error.message && error.message.includes('429')) || 
+                           (error.message && error.message.includes('Quota')) ||
+                           (error.message && error.message.includes('Too Many Requests'));
+
+      if (isQuotaError) {
+        if (i < apiKeys.length - 1) {
+             console.warn(`[AI Service] ⚠️ Quota exceeded for Key #${i + 1}. Switching to Key #${i + 2}...`);
+             continue; // Continue to next iteration (next key)
+        } else {
+             console.error("[AI Service] ❌ All API keys have exceeded their quota.");
+        }
+      } else {
+        // If it's NOT a quota error (e.g., Prompt Blocked, Server Error), do not rotate, just fail.
+        // This prevents wasting keys on bad requests.
+        throw error;
+      }
+    }
+  }
+
+  // If we exit the loop, it means all keys failed
+  throw new Error(`AI Service Failed: All ${apiKeys.length} API keys exhausted or failed. Last error: ${lastError?.message}`);
 };
