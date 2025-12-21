@@ -6,7 +6,7 @@ dotenv.config();
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
-// PRO MODEL → BEST FOR LARGE JSON, HINDI MCQ, UPPSC
+// PRO MODEL
 const model = genAI.getGenerativeModel({
   model: "gemini-2.5-flash",
   generationConfig: {
@@ -15,17 +15,12 @@ const model = genAI.getGenerativeModel({
   }
 });
 
-// ================================
-// JSON REPAIR FUNCTION
-// ================================
 function fixJSON(text: string) {
   let fixed = text;
-
   fixed = fixed.replace(/```json/g, "").replace(/```/g, "");
   fixed = fixed.replace(/[“”]/g, '"');
   fixed = fixed.replace(/[\u0000-\u001F]+/g, "");
   fixed = fixed.replace(/,\s*]/g, "]").replace(/,\s*}/g, "}");
-
   return fixed.trim();
 }
 
@@ -41,91 +36,105 @@ interface GenerateOptions {
 export const generateQuestions = async (options: GenerateOptions) => {
   const { singleCount, multiCount, matchingCount, difficulty, subjects, remarks } = options;
   const totalQuestions = singleCount + multiCount + matchingCount;
-
-  // 🔥 FULL UPPSC PROMPT INCLUDED HERE
+  if (totalQuestions <= 0) throw new Error("At least one question must be requested.");
+  if( totalQuestions > 50 ) throw new Error("Cannot generate more than 50 questions at a time.");
+  let difficultyLabel = difficulty;
+  if (difficulty.toLowerCase() === 'hard') {
+         difficultyLabel = 'Expert / Hard';
+  }
+  console.log("Generating", totalQuestions, "questions of", difficultyLabel, "level in subjects:", subjects);
+  // return;
+  // UPPSC SPECIFIC PROMPT
   const prompt = `
-    You are an expert exam setter for the **UPPSC (Uttar Pradesh Public Service Commission)**. 
+    You are an expert exam setter for the **UPPSC (Uttar Pradesh Public Service Commission)** Pre/Mains. 
     Your task is to generate a JSON array of ${totalQuestions} high-quality questions in **HINDI (Devanagari Script)**.
 
     -------------------------
-    🎯 **REQUIREMENTS**
+    🎯 **EXAM STANDARD: UPPSC (State PSC Level)**
     -------------------------
-    1. **Target Audience:** UPPSC Aspirants (Hindi Medium). Use formal, exam-standard Hindi.
-    2. **Subjects:** ${subjects}
-    3. **Difficulty Level:** ${difficulty}
-    4. **Context/Source Material:** "${remarks}"
-         ➤ If the remarks mention **NCERT**, textbook chapters, videos, etc., then questions must strictly follow those topics.
+    - **LEVEL:** ${difficultyLabel} (State PSC Standard).
+    - **STYLE:** Do NOT create simple one-liners. Focus on **Statement Based** and **Chronology** questions.
+    - **TONE:** Formal, Academic Hindi.
+    - **SUBJECTS:** ${subjects}
+    - **CONTEXT:** "${remarks}"
 
     -------------------------
-    🧩 **QUESTION DISTRIBUTION**
+    🔥 **MANDATORY QUESTION TYPES**
     -------------------------
-    - ${singleCount} × Single Correct MCQs ("single")
-    - ${multiCount} × Multiple Correct MCQs ("multi")
-    - ${matchingCount} × Match List Type Questions ("matching")
+    1. **Statement Based (कथन-आधारित):** "Consider the following statements... Which are correct?" (Only 1, Only 2, Both, None).
+    2. **Assertion-Reason (कथन-कारण):** "A: ..., R: ...". (A and R both correct and R explains A, etc.)
+    3. **Chronology (कालानुक्रम):** "Arrange the following events in chronological order."
+    4. **Match List (सुमेलित कीजिए):** Difficult matching questions.
+    5. **UP Specific:** If the subject allows (History/Geo/Polity), include Uttar Pradesh specific facts.
 
     -------------------------
-    📌 **STRICT JSON INSTRUCTIONS**
+    🧩 **DISTRIBUTION**
     -------------------------
-    - Output MUST be **ONLY** a JSON array "[]"
-    - NO explanation text outside JSON
-    - NO markdown like \`\`\`
-    - NO headings or comments
+    - ${singleCount} × Single Correct (Make these statement based or assertion-reason where possible).
+    - ${multiCount} × Multiple Selection (Select 1, 2, 3 etc).
+    - ${matchingCount} × Match List Type.
 
     -------------------------
-    📘 **SCHEMA: Single / Multi**
+    📌 **STRICT JSON SCHEMA**
     -------------------------
+    Output MUST be **ONLY** a JSON array "[]". No markdown.
+
+    **TYPE: "single"** (For Statement/Assertion type, put options A,B,C,D as usual)
     {
       "id": "unique_string",
-      "type": "single" | "multi",
-      "question": "Hindi question text using <b>bold tags</b> where appropriate.",
+      "type": "single",
+      "question": "<b>(Assertion-Reason / Statement Question Text in Hindi)</b>",
       "options": [
-        { "id": "A", "text": "Option A (Hindi)" },
-        { "id": "B", "text": "Option B (Hindi)" },
-        { "id": "C", "text": "Option C (Hindi)" },
-        { "id": "D", "text": "Option D (Hindi)" }
-      ],
-      "answer": ["A"],     // For multi: ["A", "C"]
-      "hint": "Hint in Hindi.",
-      "analysis": "Full explanation in Hindi."
-    }
-
-    -------------------------
-    📗 **SCHEMA: Matching Type**
-    -------------------------
-    {
-      "id": "unique_string",
-      "type": "matching",
-      "question": "Match List I and List II (Hindi).",
-      "list_a": ["A. Item 1", "B. Item 2", "C. Item 3", "D. Item 4"],
-      "list_b": ["1. Match 1", "2. Match 2", "3. Match 3", "4. Match 4"],
-      "options": [
-        { "id": "A", "text": "A-1, B-2, C-3, D-4" },
-        { "id": "B", "text": "A-2, B-1, C-4, D-3" },
-        { "id": "C", "text": "..." },
-        { "id": "D", "text": "..." }
+        { "id": "A", "text": "Option A" },
+        { "id": "B", "text": "Option B" },
+        { "id": "C", "text": "Option C" },
+        { "id": "D", "text": "Option D" }
       ],
       "answer": ["A"],
       "hint": "Hint in Hindi.",
-      "analysis": "Explanation in Hindi."
+      "analysis": "Detailed explanation of why statement is correct/incorrect."
     }
 
-    -------------------------
-    🛑 Output ONLY valid JSON array.
-    -------------------------
+    **TYPE: "multi"** (Checkbox style)
+    {
+      "id": "unique_string",
+      "type": "multi",
+      "question": "Which of the following are correct? (Hindi)",
+      "options": [ ... ],
+      "answer": ["A", "C"],
+      "hint": "...",
+      "analysis": "..."
+    }
+
+    **TYPE: "matching"**
+    {
+      "id": "unique_string",
+      "type": "matching",
+      "question": "Match List I with List II (Hindi)",
+      "list_a": ["A. ...", "B. ...", "C. ...", "D. ..."],
+      "list_b": ["1. ...", "2. ...", "3. ...", "4. ..."],
+      "options": [
+        { "id": "A", "text": "A-1, B-2, C-3, D-4" }, ...
+      ],
+      "answer": ["A"],
+      "hint": "...",
+      "analysis": "..."
+    }
   `;
 
   try {
-    // JSON MODE REQUIRES SENDING AS JSON OBJECT
     const result = await model.generateContent(
       JSON.stringify({ instruction: prompt })
     );
 
     const raw = result.response.text();
     const clean = fixJSON(raw);
-
-    return JSON.parse(clean);
+    const parsed = JSON.parse(clean);
+    
+    // Safety check to ensure it's an array
+    return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
     console.error("AI Generation Error:", error);
-    throw new Error("AI returned invalid JSON. Reduce question count and try again.");
+    throw new Error("AI returned invalid JSON. Please try again.");
   }
 };

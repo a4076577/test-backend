@@ -23,7 +23,7 @@ export interface IQuestion {
 export interface ITest extends Document {
   title: string;
   duration: number; // minutes
-  subjects: string[]; // Added: e.g., ['History', 'Geography']
+  subjects: string[];
   assignedTo: string;
   settings: {
     allowHints: boolean;
@@ -38,13 +38,14 @@ export interface ITest extends Document {
 export interface IAttempt extends Document {
   userId: Types.ObjectId;
   testId: Types.ObjectId;
-  attemptNumber: number; // Added: Track which attempt this is (1st, 2nd...)
+  attemptNumber: number;
   score: number;
   maxScore: number;
   percentage: number;
-  stats: {              // Added: Detailed stats
+  stats: {
     correct: number;
     incorrect: number;
+    partial: number; // NEW
     unattempted: number;
   };
   answers: Record<string, string[]>;

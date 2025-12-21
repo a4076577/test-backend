@@ -42,7 +42,7 @@ export const updateUserRole = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Approve User (Admin only) - NEW CONTROLLER
+// Approve User (Admin only)
 export const approveUser = async (req: AuthRequest, res: Response) => {
   try {
     if (req.user?.role !== 'admin' && req.user?.role !== 'superadmin') {
@@ -54,6 +54,28 @@ export const approveUser = async (req: AuthRequest, res: Response) => {
     const updatedUser = await User.findByIdAndUpdate(
       userId, 
       { isApproved: true }, 
+      { new: true }
+    ).select('-password');
+
+    res.json(updatedUser);
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// NEW: Toggle User Status (Activate/Deactivate)
+export const toggleUserStatus = async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'admin' && req.user?.role !== 'superadmin') {
+      return res.status(403).json({ message: "Access Denied" });
+    }
+
+    const { userId } = req.params;
+    const { isApproved } = req.body; // Pass the desired state
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId, 
+      { isApproved }, 
       { new: true }
     ).select('-password');
 

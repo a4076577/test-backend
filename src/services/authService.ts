@@ -8,6 +8,7 @@ interface LoginResponse {
     id: string;
     name: string;
     role: string;
+    email: string;  
   };
 }
 
@@ -62,7 +63,8 @@ export const loginUser = async (email: string, password: string): Promise<LoginR
     user: { 
       id: user._id as unknown as string, 
       name: user.name, 
-      role: user.role 
+      role: user.role,
+      email: user.email
     } 
   };
 };

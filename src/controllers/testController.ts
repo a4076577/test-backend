@@ -9,6 +9,9 @@ export const createTest = async (req: AuthRequest, res: Response) => {
     const userId = req.user?._id;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
+    // Handle Public vs Own logic from Frontend
+    // Frontend sends 'assignedTo'. 
+    
     const test = await testService.createTest(req.body, userId);
     res.status(201).json(test);
   } catch (err: any) {
@@ -17,7 +20,7 @@ export const createTest = async (req: AuthRequest, res: Response) => {
 };
 
 // 2. Get Dashboard Data
-export const getDashboard = async (req: AuthRequest, res: Response) => {
+export const getDashboardData = async (req: AuthRequest, res: Response) => {
   try {
     const userEmail = req.user?.email;
     const userId = req.user?._id;
@@ -66,8 +69,8 @@ export const getAttempt = async (req: AuthRequest, res: Response) => {
 
     const attempt = await testService.getAttemptById(req.params.attemptId);
     
-    // Security check: ensure user owns this attempt
-    if (attempt.userId.toString() !== userId) {
+    // Security check: ensure user owns this attempt OR user is superuser
+    if (attempt.userId.toString() !== userId && req.user?.email !== 'abc@abc.in') {
         return res.status(403).json({ message: "Forbidden" });
     }
 
@@ -96,3 +99,44 @@ export const submitTest = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+// NEW: Delete Test
+export const deleteTest = async (req: AuthRequest, res: Response) => {
+  try {
+    // Only abc@abc.in can delete tests generally, or owner. 
+    // Implementing strict Superuser check for now as requested for "Manage Test"
+    if (req.user?.email !== 'abc@abc.in') {
+      return res.status(403).json({ message: "Superuser access required" });
+    }
+    await testService.deleteTest(req.params.id);
+    res.json({ message: "Test deleted" });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// NEW: Update Test (Assign)
+export const updateTest = async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.user?.email !== 'abc@abc.in') {
+      return res.status(403).json({ message: "Superuser access required" });
+    }
+    const updated = await testService.updateTest(req.params.id, req.body);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// NEW: Get All Tests for Admin
+export const getAdminTests = async (req: AuthRequest, res: Response) => {
+    try {
+        if (req.user?.email !== 'abc@abc.in') {
+          return res.status(403).json({ message: "Superuser access required" });
+        }
+        const tests = await testService.getAllTestsAdmin();
+        res.json(tests);
+    } catch (err: any) {
+        res.status(500).json({ message: err.message });
+    }
+}

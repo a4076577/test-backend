@@ -12,11 +12,12 @@ const AttemptSchema = new Schema<IAttempt>({
   stats: {
     correct: Number,
     incorrect: Number,
+    partial: { type: Number, default: 0 }, // NEW
     unattempted: Number
   },
   answers: Object,
   timeTaken: Number,
   completedAt: { type: Date, default: Date.now }
 });
-// Ensure combination of userId, testId, and attemptNumber is unique
+
 export default mongoose.model<IAttempt>('Attempt', AttemptSchema);
